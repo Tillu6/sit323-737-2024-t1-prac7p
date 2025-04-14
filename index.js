@@ -4,9 +4,14 @@ const logger = require('./logger');
 const app = express();
 const port = 3000;
 
-// Root route - just to confirm the service is running
+// Root route - confirm service is running and display version 2
 app.get('/', (req, res) => {
-  res.send(' Calculator Microservice is up and running!');
+  res.send('Calculator Microservice v2 is up and running!');
+});
+
+// New version endpoint to explicitly return version information
+app.get('/version', (req, res) => {
+  res.json({ version: 'v2', message: 'This is the updated Calculator Microservice version 2' });
 });
 
 // Health check route - useful for uptime monitoring tools
@@ -14,13 +19,13 @@ app.get('/health', (req, res) => {
   res.json({ status: 'OK' });
 });
 
-// Logging middleware - logs every incoming request
+// Logging middleware - logs every incoming request with version info
 app.use((req, res, next) => {
-  logger.info(`Incoming request: [${req.method}] ${req.url}`);
+  logger.info(`v2 | Incoming request: [${req.method}] ${req.url}`);
   next();
 });
 
-// Core calculation logic
+// Core calculation logic remains the same
 const calculate = (num1, num2, operation) => {
   // Validate input
   if (isNaN(num1) || (num2 !== undefined && isNaN(num2))) {
@@ -59,10 +64,10 @@ const calculate = (num1, num2, operation) => {
 
     try {
       const result = calculate(num1, num2, operation);
-      logger.info(`Success: ${operation}(${num1}, ${num2}) = ${result}`);
+      logger.info(`v2 | Success: ${operation}(${num1}, ${num2}) = ${result}`);
       res.json({ result });
     } catch (error) {
-      logger.error(`Error performing ${operation}: ${error.message}`);
+      logger.error(`v2 | Error performing ${operation}: ${error.message}`);
       res.status(400).json({ error: error.message });
     }
   });
@@ -75,10 +80,10 @@ app.get('/mod', (req, res) => {
 
   try {
     const result = calculate(num1, num2, 'mod');
-    logger.info(`Success: ${num1} % ${num2} = ${result}`);
+    logger.info(`v2 | Success: ${num1} % ${num2} = ${result}`);
     res.json({ result });
   } catch (error) {
-    logger.error(`Modulo error: ${error.message}`);
+    logger.error(`v2 | Modulo error: ${error.message}`);
     res.status(400).json({ error: error.message });
   }
 });
@@ -89,15 +94,15 @@ app.get('/sqrt', (req, res) => {
 
   try {
     const result = calculate(num, undefined, 'sqrt');
-    logger.info(`Success: √${num} = ${result}`);
+    logger.info(`v2 | Success: √${num} = ${result}`);
     res.json({ result });
   } catch (error) {
-    logger.error(`Square root error: ${error.message}`);
+    logger.error(`v2 | Square root error: ${error.message}`);
     res.status(400).json({ error: error.message });
   }
 });
 
-// Start the server and confirm it's running
+// Start the server
 app.listen(port, () => {
-  logger.info(` Calculator Microservice is live at http://localhost:${port}`);
+  logger.info(`Calculator Microservice v2 is live at http://localhost:${port}`);
 });

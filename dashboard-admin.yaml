@@ -1,0 +1,42 @@
+###############################################################################
+# Kubernetes Dashboard Admin Setup
+#
+# This configuration file creates a ServiceAccount named 'admin-user'
+# in the 'kubernetes-dashboard' namespace and binds it to the 'cluster-admin'
+# ClusterRole. This grants full administrative access required to interact
+# with the Kubernetes Dashboard securely.
+#
+# Usage:
+# 1. Save this file as dashboard-admin.yaml.
+# 2. Apply it to your cluster using:
+#      kubectl apply -f dashboard-admin.yaml
+# 3. Retrieve the token for this service account with:
+#      kubectl -n kubernetes-dashboard create token admin-user
+#
+# Use the token to log into the Kubernetes Dashboard.
+###############################################################################
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: admin-user           # Name of the service account used for dashboard login
+  namespace: kubernetes-dashboard  # Dashboard's namespace; ensure this is correct
+  labels:
+    app: kubernetes-dashboard
+    role: admin
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: admin-user-binding   # Name for the binding resource; can be customized
+  labels:
+    app: kubernetes-dashboard
+    role: admin
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin        # Binds the service account to the 'cluster-admin' role for full access
+subjects:
+- kind: ServiceAccount
+  name: admin-user           # Reference the service account created above
+  namespace: kubernetes-dashboard  # Must match the namespace defined in the ServiceAccount
