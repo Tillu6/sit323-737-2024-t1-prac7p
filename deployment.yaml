@@ -14,6 +14,6 @@ spec:
     spec:
       containers:
       - name: node-app
-        image: tillu018/sit737-2025-prac4c
+        image: tillu018/sit737-2025-prac5p:v2
         ports:
         - containerPort: 3000
