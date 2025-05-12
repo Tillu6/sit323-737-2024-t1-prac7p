@@ -162,6 +162,72 @@ curl "http://localhost:3000/add?num1=10&num2=5"
 
 -----
 
+## 💾 Backups & Disaster Recovery
+
+To guard against data loss, we’ve added a daily MongoDB dump:
+
+1. **Backup PVC** (k8s/mongodb-backup-pvc.yaml)
+```bash
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: backup-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+```
+
+2. **CronJob** (k8s/mongodb-backup-cronjob.yaml)
+```bash
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: mongodb-backup
+spec:
+  schedule: "0 2 * * *"                     # Runs daily at 2 AM Melbourne time
+  timeZone: "Australia/Melbourne"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: backup
+            image: mongo:6.0
+            command:
+              - /bin/sh
+              - -c
+              - |
+                mongodump \
+                  --uri="$MONGO_URI" \
+                  --archive=/backups/backup-$(date +%F).gz \
+                  --gzip
+            env:
+            - name: MONGO_URI
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-secret
+                  key: mongo-uri
+            volumeMounts:
+            - name: backup-storage
+              mountPath: /backups
+          volumes:
+          - name: backup-storage
+            persistentVolumeClaim:
+              claimName: backup-pvc
+          restartPolicy: OnFailure
+```
+
+3. **Restore**
+```bash
+# Spin up a mongo pod mounting the backup PVC and restore
+kubectl run --rm -it mongo-restore --image=mongo:6.0 --overrides='{"spec":{"containers":[{"name":"mongo","image":"mongo:6.0","command":["mongorestore","--gzip","--archive=/backups/backup-<DATE>.gz"],"volumeMounts":[{"mountPath":"/backups","name":"backup-pvc"}]}],"volumes":[{"name":"backup-pvc","persistentVolumeClaim":{"claimName":"backup-pvc"}}]}}' -- bash
+```
+*Ensure your mongodb-secret.yaml includes the full connection URI under the mongo-uri key for backups.*
+
+-----
 ## 📝 Contributing
 
 1.  Fork the repo
