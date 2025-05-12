@@ -14,6 +14,23 @@ spec:
     spec:
       containers:
       - name: node-app
-        image: tillu018/sit737-2025-prac5p:v2
+        image: tillu018/sit737-2025-prac6c:v4
         ports:
         - containerPort: 3000
+        env:
+        - name: MONGO_INITDB_ROOT_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: mongodb-secret
+              key: mongo-username
+        - name: MONGO_INITDB_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mongodb-secret
+              key: mongo-password
+        - name: MONGO_URI
+          valueFrom:
+            secretKeyRef:
+              name: mongodb-secret
+              key: mongo-uri
+

@@ -12,6 +12,7 @@
   "description": "",
   "dependencies": {
     "express": "^4.21.2",
+    "mongodb": "^6.16.0",
     "winston": "^3.17.0"
   }
 }

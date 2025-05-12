@@ -1,108 +1,107 @@
+// index.js
 const express = require('express');
-const logger = require('./logger');
+const logger  = require('./logger');
+const { connect } = require('./db');
 
 const app = express();
-const port = 3000;
+app.use(express.json());
 
-// Root route - confirm service is running and display version 2
-app.get('/', (req, res) => {
-  res.send('Calculator Microservice v2 is up and running!');
-});
+// Routes that don't need DB:
+app.get('/',       (req, res) => res.send('Calculator Microservice v2 is up and running!'));
+app.get('/version',(req, res) => res.json({ version: 'v2', message: 'Calculator v2' }));
+app.get('/health', (req, res) => res.json({ status: 'OK' }));
 
-// New version endpoint to explicitly return version information
-app.get('/version', (req, res) => {
-  res.json({ version: 'v2', message: 'This is the updated Calculator Microservice version 2' });
-});
-
-// Health check route - useful for uptime monitoring tools
-app.get('/health', (req, res) => {
-  res.json({ status: 'OK' });
-});
-
-// Logging middleware - logs every incoming request with version info
+// Logging middleware
 app.use((req, res, next) => {
-  logger.info(`v2 | Incoming request: [${req.method}] ${req.url}`);
+  logger.info(`v2 | [${req.method}] ${req.url}`);
   next();
 });
 
-// Core calculation logic remains the same
-const calculate = (num1, num2, operation) => {
-  // Validate input
-  if (isNaN(num1) || (num2 !== undefined && isNaN(num2))) {
-    throw new Error('Invalid numbers provided.');
-  }
+let historyColl;
 
-  // Perform the operation
-  switch (operation) {
-    case 'add':
-      return num1 + num2;
-    case 'subtract':
-      return num1 - num2;
-    case 'multiply':
-      return num1 * num2;
+// Core calculation logic (unchanged)
+const calculate = (n1, n2, op) => {
+  if (isNaN(n1) || (n2 !== undefined && isNaN(n2))) {
+    throw new Error('Invalid numbers.');
+  }
+  switch (op) {
+    case 'add':      return n1 + n2;
+    case 'subtract': return n1 - n2;
+    case 'multiply': return n1 * n2;
     case 'divide':
-      if (num2 === 0) throw new Error('Cannot divide by zero.');
-      return num1 / num2;
-    case 'power':
-      return Math.pow(num1, num2);
+      if (n2 === 0) throw new Error('Divide by zero.');
+      return n1 / n2;
+    case 'power':    return Math.pow(n1, n2);
     case 'mod':
-      if (num2 === 0) throw new Error('Cannot perform modulo by zero.');
-      return num1 % num2;
+      if (n2 === 0) throw new Error('Modulo by zero.');
+      return n1 % n2;
     case 'sqrt':
-      if (num1 < 0) throw new Error('Cannot take square root of a negative number.');
-      return Math.sqrt(num1);
+      if (n1 < 0) throw new Error('Sqrt of negative.');
+      return Math.sqrt(n1);
     default:
       throw new Error('Unknown operation.');
   }
 };
 
-// Supported arithmetic operations that require two numbers
-['add', 'subtract', 'multiply', 'divide', 'power'].forEach((operation) => {
-  app.get(`/${operation}`, (req, res) => {
-    const num1 = parseFloat(req.query.num1 || req.query.base);
-    const num2 = parseFloat(req.query.num2 || req.query.exp);
+// Once DB is connected and collection is set, wire up the routes and start listening
+connect()
+  .then(db => {
+    historyColl = db.collection('calculations');
+    logger.info('✅ MongoDB connected, collection ready');
 
-    try {
-      const result = calculate(num1, num2, operation);
-      logger.info(`v2 | Success: ${operation}(${num1}, ${num2}) = ${result}`);
-      res.json({ result });
-    } catch (error) {
-      logger.error(`v2 | Error performing ${operation}: ${error.message}`);
-      res.status(400).json({ error: error.message });
-    }
+    // CRUD endpoints using historyColl
+    ['add','subtract','multiply','divide','power'].forEach(op => {
+      app.get(`/${op}`, async (req, res) => {
+        const n1 = parseFloat(req.query.num1);
+        const n2 = parseFloat(req.query.num2);
+        try {
+          const result = calculate(n1, n2, op);
+          await historyColl.insertOne({ op, n1, n2, result, ts: new Date() });
+          logger.info(`v2 | ${op}(${n1},${n2})=${result}`);
+          res.json({ result });
+        } catch (err) {
+          logger.error(`v2 | Error ${op}: ${err.message}`);
+          res.status(400).json({ error: err.message });
+        }
+      });
+    });
+
+    app.get('/mod', async (req, res) => {
+      const n1 = parseFloat(req.query.num1);
+      const n2 = parseFloat(req.query.num2);
+      try {
+        const result = calculate(n1, n2, 'mod');
+        await historyColl.insertOne({ op:'mod', n1, n2, result, ts: new Date() });
+        res.json({ result });
+      } catch (err) {
+        res.status(400).json({ error: err.message });
+      }
+    });
+
+    app.get('/sqrt', async (req, res) => {
+      const n1 = parseFloat(req.query.num);
+      try {
+        const result = calculate(n1, undefined, 'sqrt');
+        await historyColl.insertOne({ op:'sqrt', n1, result, ts: new Date() });
+        res.json({ result });
+      } catch (err) {
+        res.status(400).json({ error: err.message });
+      }
+    });
+
+    // History endpoint
+    app.get('/history', async (_, res) => {
+      const recent = await historyColl.find().sort({ ts:-1 }).limit(50).toArray();
+      res.json(recent);
+    });
+
+    // Start server _only after_ DB is ready
+    const port = process.env.PORT || 3000;
+    app.listen(port, () =>
+      logger.info(`Calculator v2 listening on port ${port}`)
+    );
+  })
+  .catch(err => {
+    console.error('❌ Failed to connect to MongoDB:', err);
+    process.exit(1);
   });
-});
-
-// Modulo operation - two number inputs
-app.get('/mod', (req, res) => {
-  const num1 = parseFloat(req.query.num1);
-  const num2 = parseFloat(req.query.num2);
-
-  try {
-    const result = calculate(num1, num2, 'mod');
-    logger.info(`v2 | Success: ${num1} % ${num2} = ${result}`);
-    res.json({ result });
-  } catch (error) {
-    logger.error(`v2 | Modulo error: ${error.message}`);
-    res.status(400).json({ error: error.message });
-  }
-});
-
-// Square root operation - only one number input
-app.get('/sqrt', (req, res) => {
-  const num = parseFloat(req.query.num);
-
-  try {
-    const result = calculate(num, undefined, 'sqrt');
-    logger.info(`v2 | Success: √${num} = ${result}`);
-    res.json({ result });
-  } catch (error) {
-    logger.error(`v2 | Square root error: ${error.message}`);
-    res.status(400).json({ error: error.message });
-  }
-});
-
-// Start the server
-app.listen(port, () => {
-  logger.info(`Calculator Microservice v2 is live at http://localhost:${port}`);
-});
