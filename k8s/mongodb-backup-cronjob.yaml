@@ -1,0 +1,36 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: mongodb-backup
+spec:
+  schedule: "0 2 * * *"                     # 2 AM
+  timeZone: "Australia/Melbourne"           # ← runs at 2 AM Melbourne time
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: backup
+            image: mongo:6.0
+            command:
+              - /bin/sh
+              - -c
+              - |
+                mongodump \
+                  --uri="$MONGO_URI" \
+                  --archive=/backups/backup-$(date +%F).gz \
+                  --gzip
+            env:
+            - name: MONGO_URI
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-secret
+                  key: mongo-uri
+            volumeMounts:
+            - name: backup-storage
+              mountPath: /backups
+          volumes:
+          - name: backup-storage
+            persistentVolumeClaim:
+              claimName: backup-pvc
+          restartPolicy: OnFailure
